@@ -37,3 +37,7 @@ The data source implementation in the infrastructure layer is responsible for pr
 ### Presentation— Controller
 
 Controllers are presentation layer components that act as entry points for client requests in an application. These controllers are responsible for receiving HTTP requests, processing them and directing them to the corresponding business logic in the domain layer.
+
+### Presentation — Routes
+
+Routes are presentation layer components that are responsible for defining routes and handling incoming HTTP requests to an application. These routes are used to map HTTP requests to the corresponding controllers and establish the API structure or routing of the application. It is also where our data source and our repository are initialized, the same that is necessary for our controller.
