@@ -1,28 +1,31 @@
-import express, { type Request, type Response } from 'express';
+import { type Server as ServerHttp, type IncomingMessage, type ServerResponse } from 'http';
+import express, { type Router, type Request, type Response, type NextFunction } from 'express';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 
 import { HttpCode, ONE_HUNDRED, ONE_THOUSAND, SIXTY } from './core/constants';
+import { ErrorMiddleware } from './features/shared/presentation/middlewares/error.middleware';
+import { AppError } from './core/errors/custom.error';
 
 export interface ServerOptions {
 	port: number;
+	routes: Router;
 	apiPrefix: string;
 }
 
 export class Server {
-	private readonly app = express();
+	public readonly app = express(); // This is public for testing purposes
+	private serverListener?: ServerHttp<typeof IncomingMessage, typeof ServerResponse>;
 	private readonly port: number;
+	private readonly routes: Router;
+	private readonly apiPrefix: string;
 
 	constructor(options: ServerOptions) {
-		const { port } = options;
+		const { port, routes, apiPrefix } = options;
 		this.port = port;
+		this.routes = routes;
+		this.apiPrefix = apiPrefix;
 	}
-
-	/**
-	 * Starts the server and initializes all middlewares and routes.
-	 *
-	 * @returns {Promise<void>} A promise that resolves when the server is ready to accept connections.
-	 */
 
 	async start(): Promise<void> {
 		//* Middlewares
@@ -38,6 +41,24 @@ export class Server {
 			})
 		);
 
+		// CORS
+		this.app.use((req, res, next) => {
+			// Add your origins
+			const allowedOrigins = ['http://localhost:3000'];
+			const origin = req.headers.origin;
+			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+			if (allowedOrigins.includes(origin!)) {
+				// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+				res.setHeader('Access-Control-Allow-Origin', origin!);
+			}
+			res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+			res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+			next();
+		});
+
+		//* Routes
+		this.app.use(this.apiPrefix, this.routes);
+
 		// Test rest api
 		this.app.get('/', (_req: Request, res: Response) => {
 			return res.status(HttpCode.OK).send({
@@ -45,8 +66,20 @@ export class Server {
 			});
 		});
 
-		this.app.listen(this.port, () => {
+		//* Handle not found routes in /api/v1/* (only if 'Public content folder' is not available)
+		this.routes.all('*', (req: Request, _: Response, next: NextFunction): void => {
+			next(AppError.notFound(`Cant find ${req.originalUrl} on this server!`));
+		});
+
+		// Handle errors middleware
+		this.routes.use(ErrorMiddleware.handleError);
+
+		this.serverListener = this.app.listen(this.port, () => {
 			console.log('🚀 ~ Server running on port:', this.port);
 		});
+	}
+
+	close(): void {
+		this.serverListener?.close();
 	}
 }
